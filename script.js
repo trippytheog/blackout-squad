@@ -186,3 +186,191 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 });
+(() => {
+    const form = document.getElementById("contact-form");
+    const modal = document.getElementById("form-modal");
+
+    if (!form || !modal) {
+        return;
+    }
+
+    const modalIcon = document.getElementById("form-modal-icon");
+    const modalKicker = document.getElementById("form-modal-kicker");
+    const modalTitle = document.getElementById("form-modal-title");
+    const modalMessage = document.getElementById("form-modal-message");
+    const closeButton = document.getElementById("form-modal-close");
+
+    const characterCount = document.getElementById("character-count");
+
+    let previousFocus = null;
+    let isSubmitting = false;
+
+    function openModal(state, title, message, icon, kicker, showClose = true) {
+        previousFocus = document.activeElement;
+
+        modal.dataset.state = state;
+
+        modalTitle.textContent = title;
+        modalMessage.textContent = message;
+        modalIcon.textContent = icon;
+        modalKicker.textContent = kicker;
+
+        closeButton.hidden = !showClose;
+
+        modal.classList.add("is-open");
+        modal.setAttribute("aria-hidden", "false");
+
+        document.body.classList.add("form-modal-open");
+
+        if (showClose) {
+            closeButton.focus();
+        }
+    }
+
+    function closeModal() {
+        if (modal.dataset.state === "loading") {
+            return;
+        }
+
+        modal.classList.remove("is-open");
+        modal.setAttribute("aria-hidden", "true");
+
+        document.body.classList.remove("form-modal-open");
+
+        if (previousFocus && typeof previousFocus.focus === "function") {
+            previousFocus.focus();
+        }
+    }
+    closeButton.addEventListener("click", closeModal);
+    modal.addEventListener("click", (event) => {
+        if (event.target === modal) {
+            closeModal();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (
+            event.key === "Escape" &&
+            modal.classList.contains("is-open")
+        ) {
+            closeModal();
+        }
+    });
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if (isSubmitting) {
+            return;
+        }
+        if (!form.reportValidity()) {
+            return;
+        }
+
+        const accessKey = form.querySelector(
+            'input[name="access_key"]'
+        );
+
+        if (!accessKey || !accessKey.value.trim()) {
+            openModal(
+                "error",
+                "CONFIGURATION ERROR",
+                "The contact form is not configured correctly. Please try again later.",
+                "!",
+                "FORM ERROR"
+            );
+
+            return;
+        }
+
+        isSubmitting = true;
+
+        const submitButton = form.querySelector(
+            'button[type="submit"]'
+        );
+
+        const originalButtonText = submitButton
+            ? submitButton.innerHTML
+            : "";
+
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.setAttribute("aria-busy", "true");
+        }
+
+        openModal(
+            "loading",
+            "SENDING MESSAGE",
+            "Please wait while we send your message to the Blackout Squad team.",
+            "…",
+            "PLEASE WAIT",
+            false
+        );
+
+        try {
+            const formData = new FormData(form);
+
+            const response = await fetch(
+                "https://api.web3forms.com/submit",
+                {
+                    method: "POST",
+                    body: formData,
+                    headers: {
+                        Accept: "application/json"
+                    }
+                }
+            );
+
+            let result;
+
+            try {
+                result = await response.json();
+            } catch {
+                result = null;
+            }
+            if (
+                !response.ok ||
+                !result ||
+                result.success !== true
+            ) {
+                throw new Error(
+                    result && result.message
+                        ? result.message
+                        : "We couldn't send your message. Please try again."
+                );
+            }
+            form.reset();
+
+            if (characterCount) {
+                characterCount.textContent = "0 / 2000";
+            }
+
+            openModal(
+                "success",
+                "MESSAGE SENT",
+                "Thank you for reaching out. Your message has been sent successfully. The Blackout Squad team will get back to you as soon as possible.",
+                "✓",
+                "TRANSMISSION CONFIRMED"
+            );
+
+        } catch (error) {
+            openModal(
+                "error",
+                "MESSAGE NOT SENT",
+                error && error.message
+                    ? error.message
+                    : "A connection error occurred. Please check your internet connection and try again.",
+                "!",
+                "TRANSMISSION FAILED"
+            );
+
+        } finally {
+            isSubmitting = false;
+
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.removeAttribute("aria-busy");
+                submitButton.innerHTML = originalButtonText;
+            }
+        }
+    });
+})();
